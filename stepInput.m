@@ -9,9 +9,8 @@ function [time, input, data] = stepInput(length, settlingTime, frictionCompensat
     SETTLING_LENGTH = settlingTime / T_S;
     time = 0:T_S:(N_S-1)*T_S; %Vector saving the time steps.
 
-    data = zeros(N_S, 8); %Vector saving the datas. If there are several datas to save, change "1" to the number of outputs.
-    input = cat(1, zeros(SETTLING_LENGTH, 1), ones(N_S - SETTLING_LENGTH, 1)*stepHeight); %Vector storing the input sent to the plant.
-    input(1:3000) = 0;
+    data = zeros(8, N_S); %Vector saving the datas. If there are several datas to save, change "1" to the number of outputs.
+    input = horzcat(zeros(1,SETTLING_LENGTH), ones(1,N_S - SETTLING_LENGTH)*stepHeight); %Vector storing the input sent to the plant.
 
     openinout; %Open the ports of the analog computer.
     i=1; %Set the counter to 1.
@@ -47,4 +46,4 @@ function [time, input, data] = stepInput(length, settlingTime, frictionCompensat
 
 
     figure %Open a new window for plot.
-    plot(time,data(:,1),time,input(:,1)); %Plot the experiment (input and output).
+    plot(time,data(1,:),time,input(1,:)); %Plot the experiment (input and output).
