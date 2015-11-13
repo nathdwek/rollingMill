@@ -13,13 +13,13 @@ function [time, reference, output, input] = controller()
 
 
     function [nSamples, time, reference, output, input] = referenceGenerator()
-        STEP_LENGTH = 10;%seconds
-        STEP_HEIGHT = 1.3;
+        STEP_LENGTH = 60;%seconds
+        STEP_HEIGHT = 0;
         
-        SETUP_TIME = 5;%seconds
+        SETUP_TIME = 8;%seconds
         %SETUP_POINT = 2.4;%V Right Motor
-        SETUP_POINT = 2.7;%V Left Motor
-        SETTLING_TIME = 2;%seconds
+        SETUP_POINT = 2;%V Left Motor
+        SETTLING_TIME = 0;%seconds
         
         reference = horzcat(0:T_S*SETUP_POINT/SETUP_TIME:SETUP_POINT, SETUP_POINT*ones(1,SETTLING_TIME/T_S), (SETUP_POINT+STEP_HEIGHT)*ones(1,STEP_LENGTH/T_S));
         
@@ -79,19 +79,25 @@ function [time, reference, output, input] = controller()
     while i < nSamples
         tic %Begins the first strike of the clock.
         [input(1,i), input(2,i), input(3,i), input(4,i), input(5,i), input(6,i), input(7,i), input(8,i)]  = anain; %Acquisition of the measurements.
-
-        if(input(2,i) > 8 || input(3,i) > 8)
+        
+        rmVelocity = input(5,i); %saving the inputs in a variable for ease of working
+        lmVelocity = input(4,i);
+        lTraction = input(3,i);
+        rTraction = input(2,i);
+        
+        if(lTraction > 8 || rTraction > 8) % safety measures if traction is to hinh
             lmCurrent = 0;
             rmCurrent = 0;
-
+            i = nSamples + 1;
+            
         else
-            lmCurrent = lmController(reference(i), input(4,i));
-            rmCurrent = rmController(-reference(i)/2, input(5,i));
+            lmCurrent = lmController(reference(i), lmVelocity);
+            %rmCurrent = rmController(-reference(i)/2, rmVelocity);
         end
-
-        output(2,i) = rmCurrent;
+            
+        %output(2,i) = rmCurrent;
         output(1,i) = lmCurrent;
-        anaout(lmCurrent, rmCurrent);
+        anaout(lmCurrent, 0);
         
 
         if toc > T_S
