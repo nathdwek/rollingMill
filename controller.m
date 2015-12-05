@@ -1,4 +1,4 @@
-function [time, reference, output, input] = controller()
+function [time, reference, output, input, innerTractionRefArray, rSpeedRefArray] = controller()
 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     %Control System Design Lab: Overall Controller Loop
@@ -13,15 +13,25 @@ function [time, reference, output, input] = controller()
 
 
     function [nSamples, time, reference, output, input] = referenceGenerator()
-        STEP_LENGTH = 60;%seconds
-        STEP_HEIGHT = 0;
+        %REF(1,:) = traction
+        %REF(2,:) = master speed
         
+        %traction
+        EXP_LENGTH = 50;%sec
+        TRACTION_REF = 3;
+        TRAC_SETUP_TIME = 8;
+        
+        tracRamp = 0:T_S*TRACTION_REF/TRAC_SETUP_TIME:TRACTION_REF;
+        reference(1,:) = [tracRamp TRACTION_REF*ones(1, EXP_LENGTH/T_S - length(tracRamp))];
+        
+        %master
         SETUP_TIME = 8;%seconds
-        %SETUP_POINT = 2.4;%V Right Motor
         SETUP_POINT = 2;%V Left Motor
-        SETTLING_TIME = 0;%seconds
         
-        reference = horzcat(0:T_S*SETUP_POINT/SETUP_TIME:SETUP_POINT, SETUP_POINT*ones(1,SETTLING_TIME/T_S), (SETUP_POINT+STEP_HEIGHT)*ones(1,STEP_LENGTH/T_S));
+        ramp = 0:T_S*SETUP_POINT/SETUP_TIME:SETUP_POINT;
+        rampLength = length(ramp);
+        
+        reference(2,:) = [ramp ones(1,length(reference(1,:))-rampLength)*SETUP_POINT];
         
         nSamples = length(reference);
         time=0:T_S:(nSamples-1)*T_S; 
@@ -31,6 +41,8 @@ function [time, reference, output, input] = controller()
 
 
     [nSamples, time, reference, output, input] = referenceGenerator(); %precompute the reference and generate arrays of according size
+    innerTractionRefArray = zeros(1,nSamples);
+    rSpeedRefArray = zeros(1,nSamples);
     
     %%
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -59,9 +71,9 @@ function [time, reference, output, input] = controller()
 
     function current = rmController(speedRef, measuredSpeed)
         if speedRef < 0
-            FRICTION_COMPENSATOR  = -2.7;
+            FRICTION_COMPENSATOR  = -2.1;
         else
-            FRICTION_COMPENSATOR  = 2.7;
+            FRICTION_COMPENSATOR  = 2.1;
         end
         KP = 3;
 
@@ -69,6 +81,23 @@ function [time, reference, output, input] = controller()
         current = FRICTION_COMPENSATOR + KP*error;
     end
 
+    function speedRef = innerLoopSpeed(traction, innerTractionRef)
+        K = -0.123;
+        speedRef = K*(innerTractionRef-traction);
+    end
+
+    function innerTractionRef = outerLoopTraction(traction, tractionRef)
+        persistent errorIntegral;
+        if isempty(errorIntegral)
+            errorIntegral = 0;
+        end
+        K = 2;
+        ZERO = 1.9;
+        KI = ZERO*K;
+        error = tractionRef - traction;
+        errorIntegral = errorIntegral + error*T_S;
+        innerTractionRef = K*(error) + KI*errorIntegral;
+    end
 
     %%
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -85,19 +114,25 @@ function [time, reference, output, input] = controller()
         lTraction = input(3,i);
         rTraction = input(2,i);
         
-        if(lTraction > 8 || rTraction > 8) % safety measures if traction is to hinh
+        if(lTraction > 6 || rTraction > 6) % safety measures if traction is to hinh
             lmCurrent = 0;
             rmCurrent = 0;
             i = nSamples + 1;
             
         else
-            lmCurrent = lmController(reference(i), lmVelocity);
-            %rmCurrent = rmController(-reference(i)/2, rmVelocity);
+            lmCurrent = lmController(reference(2,i), lmVelocity);
+            
+            %Cascade loops
+            innerTractionRef = outerLoopTraction(rTraction, reference(1,i));
+            rSpeedRef = innerLoopSpeed(rTraction, innerTractionRef);
+            rmCurrent = rmController(rSpeedRef, rmVelocity);
+            innerTractionRefArray(i) = innerTractionRef;
+            rSpeedRefArray(i) = rSpeedRef;
         end
             
-        %output(2,i) = rmCurrent;
+        output(2,i) = rmCurrent;
         output(1,i) = lmCurrent;
-        anaout(lmCurrent, 0);
+        anaout(lmCurrent, rmCurrent);
         
 
         if toc > T_S
@@ -108,15 +143,4 @@ function [time, reference, output, input] = controller()
         end
         i=i+1;
     end
-
-    %%
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    %Plots
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-    figure %Open a new window for plot.
-    plot(time,reference(1,:), time, input(4, :), time, reference(1,:) - input(4, :), time, output(1,:)); %Plot the experiment (input and output).
-    legend('reference(t)','velocity(t)','error(t)','current(t)');
-    figure;
-    plot(time,input(1,:), time, input(2, :), time,input(3, :), time, input(4,:),time,input(5,:)); %Plot the experiment (input and output).
 end

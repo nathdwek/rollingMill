@@ -1,4 +1,4 @@
-function [time, input, data] = stepInput(length, settlingTime, frictionCompensator, stepHeight)
+function [time, input, output] = stepInput(length, settlingTime, frictionCompensator, stepHeight)
     %%
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     %Setup
@@ -9,7 +9,7 @@ function [time, input, data] = stepInput(length, settlingTime, frictionCompensat
     SETTLING_LENGTH = settlingTime / T_S;
     time = 0:T_S:(N_S-1)*T_S; %Vector saving the time steps.
 
-    data = zeros(8, N_S); %Vector saving the datas. If there are several datas to save, change "1" to the number of outputs.
+    output = zeros(8, N_S); %Vector saving the datas. If there are several datas to save, change "1" to the number of outputs.
     input = horzcat(zeros(1,SETTLING_LENGTH), ones(1,N_S - SETTLING_LENGTH)*stepHeight); %Vector storing the input sent to the plant.
 
     openinout; %Open the ports of the analog computer.
@@ -23,10 +23,16 @@ function [time, input, data] = stepInput(length, settlingTime, frictionCompensat
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
     while i <= N_S
-        data(i, :) = anain; %Acquisition of the measurements.
-
-        input = input(i) + frictionCompensator; %Input of the system.
-        anaout(input, 0); %Command to send the input to the analog computer.
+        [output(1,i), output(2,i), output(3,i), output(4,i), output(5,i), output(6,i), output(7,i), output(8,i)]  = anain; %Acquisition of the measurements.
+        
+        rmVelocity = output(5,i); %saving the inputs in a variable for ease of working
+        lmVelocity = output(4,i);
+        lTraction = output(3,i);
+        rTraction = output(2,i);
+        
+        
+        amps = input(i) + frictionCompensator; %Input of the system.
+        anaout(0, amps); %Command to send the input to the analog computer.
 
         if toc > i*T_S
             disp('Sampling time too small');%Test if the sampling time is too small.
@@ -37,7 +43,6 @@ function [time, input, data] = stepInput(length, settlingTime, frictionCompensat
         i = i+1;
     end
 
-    closeinout %Close the ports.
 
     %%
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -46,4 +51,4 @@ function [time, input, data] = stepInput(length, settlingTime, frictionCompensat
 
 
     figure %Open a new window for plot.
-    plot(time,data(1,:),time,input(1,:)); %Plot the experiment (input and output).
+    plot(time,output(5,:),time,input(:)); %Plot the experiment (input and output).
